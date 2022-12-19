@@ -1,15 +1,24 @@
 import Foundation
-import ShellOut
+import FileWatcher
 
 @main
 public struct flutterrunner {
 
     public static func main() {
-        guard let devices = try? shellOut(to: "flutter", arguments: ["devices"]) else {
+        let devicesProcess = Process()
+        devicesProcess.launchPath = "/usr/bin/env"
+        let pipe = Pipe()
+        devicesProcess.standardOutput = pipe
+        devicesProcess.standardError = pipe
+        devicesProcess.arguments = ["flutter", "devices"]
+        devicesProcess.launch()
+        devicesProcess.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let devices = String(data: data, encoding: .utf8) else {
             print("Error: flutter devices failed")
             return
         }
-
+        devicesProcess.terminate()
         print("Devices: \(devices)")
 
 // Output:
@@ -48,38 +57,57 @@ public struct flutterrunner {
             let process = Process()
             process.launchPath = "/usr/bin/env"
             let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
+            // process.standardOutput = pipe
+            // process.standardError = pipe
+            process.standardInput = pipe
 
             let file = pipe.fileHandleForReading
             file.readabilityHandler = { file in
-                if let line = String(data: file.availableData, encoding: .utf8) {
-                    print(line)
+                if let _ = String(data: file.availableData, encoding: .utf8) {
+                    // print(file)
+                    print("Running on \(uuid)")
                 }
             }
-
+            
             process.arguments = ["flutter", "run", "-d", uuid]
             processes.append(process)
             pipes.append(pipe)
         }
 
-        processes.enumerated().forEach { process in
-            process.element.launch()
-            let file = pipes[process.offset].fileHandleForReading
-            file.readabilityHandler = { file in
-                if let line = String(data: file.availableData, encoding: .utf8) {
-                    guard line.contains("Running with sound null safety") else {
-                        print("Error: flutter run failed")
-                        return
+
+        for process in processes {
+            let tmpPipe = Pipe()
+            process.standardOutput = tmpPipe
+            process.launch()
+
+            while true {
+                let data = tmpPipe.fileHandleForReading.availableData
+                if let string = String(data: data, encoding: .utf8) {
+                    print(string)
+                    if string.contains("Running with sound null safety") {
+                        break
                     }
                 }
+            sleep(2)       
             }
         }
 
-        processes.forEach { process in
-            process.waitUntilExit()
-        }
+        print("Start watching files..")
 
-        RunLoop.main.run()
+let filewatcher = FileWatcher([NSString(string: FileManager.default.currentDirectoryPath + "/lib").expandingTildeInPath])
+
+filewatcher.callback = { event in
+  if event.path.hasSuffix(".dart") {
+    for pipe in pipes {
+        print("File changed: \(event.path)")
+        pipe.fileHandleForWriting.write("r".data(using: .utf8)!)
+        
+    }
+  }
+}
+
+filewatcher.start()
+
+RunLoop.main.run()
     }
 }
