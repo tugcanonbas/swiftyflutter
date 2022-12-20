@@ -44,6 +44,65 @@ public struct flutterrunner {
       }
     }
 
+    launchProcesses(processes)
+
+    print("Start watching files..")
+
+    let filewatcher = FileWatcher([
+      NSString(string: FileManager.default.currentDirectoryPath + "/lib").expandingTildeInPath
+    ])
+
+    filewatcher.callback = { event in
+      if event.path.hasSuffix(".dart") {
+        for pipe in pipes {
+          //   print("File changed: \(event.path)")
+          pipe.fileHandleForWriting.write("r".data(using: .utf8)!)
+
+        }
+      }
+    }
+
+    filewatcher.start()
+
+    // Get input from user
+    let input = FileHandle.standardInput
+    input.waitForDataInBackgroundAndNotify()
+
+    print(
+      """
+          Press:
+          'r' to reload,
+          'R' to restart,
+          'q/Q' to quit,
+      """
+    )
+
+    let notificationCenter = NotificationCenter.default
+    notificationCenter.addObserver(
+      forName: NSNotification.Name.NSFileHandleDataAvailable, object: input, queue: nil
+    ) { notification in
+      let data = input.availableData
+      if let string = String(data: data, encoding: .utf8) {
+        if string.contains("r") {
+          print("Reloading..")
+          pipes.forEach { $0.fileHandleForWriting.write("r".data(using: .utf8)!) }
+        } else if string.contains("R") {
+          print("Restarting..")
+          pipes.forEach { $0.fileHandleForWriting.write("R".data(using: .utf8)!) }
+        } else if string.contains("q") || string.contains("Q") {
+          print("Quitting..")
+          pipes.forEach { $0.fileHandleForWriting.write("q".data(using: .utf8)!) }
+          processes.forEach { $0.terminate() }
+          exit(0)
+        }
+      }
+      input.waitForDataInBackgroundAndNotify()
+    }
+
+    RunLoop.main.run()
+  }
+
+  static func launchProcesses(_ processes: [Process]) {
     for process in processes {
       let tmpPipe = Pipe()
       process.standardOutput = tmpPipe
@@ -66,58 +125,6 @@ public struct flutterrunner {
         sleep(2)
       }
     }
-
-    print("Start watching files..")
-
-    let filewatcher = FileWatcher([
-      NSString(string: FileManager.default.currentDirectoryPath + "/lib").expandingTildeInPath
-    ])
-
-    filewatcher.callback = { event in
-      if event.path.hasSuffix(".dart") {
-        for pipe in pipes {
-          print("File changed: \(event.path)")
-          pipe.fileHandleForWriting.write("r".data(using: .utf8)!)
-
-        }
-      }
-    }
-
-    filewatcher.start()
-
-    // Get input from user
-    let input = FileHandle.standardInput
-    input.waitForDataInBackgroundAndNotify()
-
-    print(
-      """
-          Press 'r' to reload,
-          'R' to restart,
-          'q' to quit..
-      """
-    )
-
-    let notificationCenter = NotificationCenter.default
-    notificationCenter.addObserver(
-      forName: NSNotification.Name.NSFileHandleDataAvailable, object: input, queue: nil
-    ) { notification in
-      let data = input.availableData
-      if let string = String(data: data, encoding: .utf8) {
-        if string.contains("r") {
-          print("Reloading..")
-          pipes.forEach { $0.fileHandleForWriting.write("r".data(using: .utf8)!) }
-        } else if string.contains("R") {
-          print("Restarting..")
-          pipes.forEach { $0.fileHandleForWriting.write("R".data(using: .utf8)!) }
-        } else if string.contains("q") || string.contains("Q") {
-          print("Quitting..")
-          pipes.forEach { $0.fileHandleForWriting.write("q".data(using: .utf8)!) }
-        }
-      }
-      input.waitForDataInBackgroundAndNotify()
-    }
-
-    RunLoop.main.run()
   }
 }
 
