@@ -5,7 +5,7 @@ import Foundation
 public struct flutterrunner {
 
   public static func main() {
-    runsubs()
+    // runsubs()
   }
 
   public static func runsubs() {
@@ -22,7 +22,7 @@ public struct flutterrunner {
     pipe.fileHandleForReading.closeFile()
     devicesProcess.terminate()
 
-    guard let devices = Device.fromJSON(data) else {
+    guard let devices = DeviceDTO.fromJSON(data) else {
       print("Could not parse devices")
       return
     }
@@ -126,41 +126,4 @@ public struct flutterrunner {
       }
     }
   }
-}
-
-struct Device: Decodable {
-  let name: String
-  let id: String
-  let isSupported: Bool
-  let targetPlatform: String
-  let emulator: Bool
-  let sdk: String
-  let capabilities: Capabilities
-
-  static func fromJSON(_ data: Data) -> [Device]? {
-    return try? JSONDecoder().decode([Device].self, from: data)
-  }
-
-  func run() -> (Process, Pipe) {
-    let process = Process()
-    process.launchPath = "/usr/bin/env"
-    let pipe = Pipe()
-    // process.standardOutput = pipe
-    // process.standardError = pipe
-    process.standardInput = pipe
-
-    process.arguments = ["flutter", "run", "-d", self.id]
-
-    return (process, pipe)
-  }
-}
-
-struct Capabilities: Decodable {
-  let hotReload: Bool
-  let hotRestart: Bool
-  let screenshot: Bool
-  let fastStart: Bool
-  let flutterExit: Bool
-  let hardwareRendering: Bool
-  let startPaused: Bool
 }
