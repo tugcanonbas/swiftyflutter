@@ -5,7 +5,49 @@ import Foundation
 public struct flutterrunner {
 
   public static func main() {
-    // runsubs()
+    print(
+      """
+
+      Welcome to swiftyflutter!
+
+      """
+    )
+    defer {
+      print("Exiting..")
+    }
+    // Control-C handler
+    signal(SIGINT) { signal in
+      print("Exiting..")
+      exit(0)
+    }
+
+    runNew()
+    // RunLoop.main.run()
+  }
+
+  static func runNew() {
+    let devices = DeviceManager.shared.getAvailableDevices()
+
+    if devices.first(where: { $0.isBooted == true }) != nil {
+      Util.print("Booted device found. Starting the app in debug mode..")
+
+      let bootedDevices = devices.filter { $0.isBooted == true }
+
+      bootedDevices.forEach { device in
+        device.runApp()
+      }
+
+    } else {
+      //TODO: - First one is booted and others are not booted
+      Util.print("Trying to boot the devices..")
+      devices.forEach { device in
+        print("Booting \(device.name) (\(device.id))")
+        device.boot()
+        DeviceManager.shared.checkIsIOSDeviceIsBooted(device)
+        print("Booted:\n\(device.toString())")
+      }
+    }
+
   }
 
   public static func runsubs() {

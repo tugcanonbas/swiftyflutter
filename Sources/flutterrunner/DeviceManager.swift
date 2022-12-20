@@ -7,22 +7,23 @@
 
 import Foundation
 
+enum DeviceManagerError: Error {
+  case noDevicesFound
+  case noUDIDFound
+}
+
 class DeviceManager {
+  static let shared = DeviceManager()
+
   var availableDevices = [Device]()
   var favorites = [Device]()
-  var processes = [Process]()
-  var pipes = [Pipe]()
 
-  let shared = DeviceManager()
-
-  private init() {
-    self.availableDevices = []
-    self.favorites = []
-    self.processes = []
-    self.pipes = []
+  func test() {
+    let devices = getAvailableDevices()
+    print(devices)
   }
 
-  private func fetchAvailableDevices() {
+  private func getFlutterDevices() throws -> [Device] {
     let devicesProcess = Process()
     devicesProcess.launchPath = "/usr/bin/env"
     let pipe = Pipe()
@@ -36,15 +37,130 @@ class DeviceManager {
     pipe.fileHandleForReading.closeFile()
     devicesProcess.terminate()
 
-    guard let devices = Device.fromJSON(data) else {
-      print("Could not parse devices")
+    let devices = try JSONDecoder().decode([DeviceDTO].self, from: data).map {
+      $0.toModel()
+    }
+    .filter { $0.targetPlatform.isMobile }
+
+    return devices
+  }
+
+  private func fetchIOSSimulators() throws -> [Device] {
+    let process = Process()
+    process.launchPath = "/usr/bin/env"
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+
+    process.arguments = ["xcrun", "xctrace", "list", "devices"]
+
+    process.launch()
+
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.terminate()
+
+    guard let dataString = String(data: data, encoding: .utf8) else {
+      throw DeviceManagerError.noDevicesFound
+    }
+
+    let lines = dataString.components(separatedBy: "\n")
+    let iPhones = lines.filter { $0.contains("iPhone") }
+    let simulators = iPhones.filter { $0.contains("Simulator") }
+
+    let devices: [Device] = try simulators.map { line in
+      let components = line.components(separatedBy: " ")
+      let name = line.components(separatedBy: " Simulator")[0]
+      guard let udid = components.last?.dropFirst().dropLast() else {
+        throw DeviceManagerError.noUDIDFound
+      }
+      let isSupported = true
+      let targetPlatform = TargetPlatform.ios
+      let emulator = true
+      let sdk = components[components.count - 2].dropFirst().dropLast()
+      let capabilities = Capabilities.empty()
+
+      let device = Device(
+        name: name, id: String(udid), isSupported: isSupported, targetPlatform: targetPlatform,
+        emulator: emulator, sdk: String(sdk), capabilities: capabilities)
+
+      checkIsIOSDeviceIsBooted(device)
+
+      return device
+    }
+
+    return devices
+  }
+
+  func checkIsIOSDeviceIsBooted(_ device: Device) {
+    let process = Process()
+    process.launchPath = "/usr/bin/env"
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+
+    process.arguments = ["xcrun", "simctl", "bootstatus", device.id]
+
+    process.launch()
+    sleep(2)
+    process.terminate()
+
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    pipe.fileHandleForReading.closeFile()
+
+    guard let dataString = String(data: data, encoding: .utf8) else {
       return
     }
 
-    self.availableDevices = devices
+    if dataString.contains("Booted") {
+      device.isBooted = true
+      return
+    } else if dataString.contains("shutdown") {
+      device.isBooted = false
+      return
+    }
   }
 
   func getAvailableDevices() -> [Device] {
+    var devices = [Device]()
+
+    guard let iosSimulators = try? fetchIOSSimulators() else {
+      print("No iOS simulators found")
+      return []
+    }
+    guard let flutterDevices = try? getFlutterDevices() else {
+      print("No flutter devices found")
+      return []
+    }
+
+    devices.append(contentsOf: flutterDevices)
+
+    for simulator in iosSimulators {
+      if !devices.contains(where: { $0.id == simulator.id }) {
+        devices.append(simulator)
+      }
+    }
+
+    self.availableDevices = devices
+
+    if self.availableDevices.isEmpty {
+      print("No devices found")
+      return []
+    }
+
+    print(
+      """
+      ==========================================================
+
+      AVAILABLE DEVICES (\(self.availableDevices.count)):
+
+      ==========================================================
+
+      \(self.availableDevices.map { $0.toString() }.joined(separator: "\n\n============================\n\n"))
+
+      ==========================================================
+      """
+    )
+
     return self.availableDevices
   }
 }

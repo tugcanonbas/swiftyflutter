@@ -7,13 +7,14 @@
 
 import Foundation
 
-enum DeviceType: String {
+enum TargetPlatform: String, CaseIterable {
   case android
   case ios
   case web
   case linux
   case macos
   case windows
+  case unknown
 
   var isMobile: Bool {
     return self == .android || self == .ios
