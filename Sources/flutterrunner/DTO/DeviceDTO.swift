@@ -22,8 +22,18 @@ struct DeviceDTO: Decodable {
 
   func toModel() -> Device {
 
-    let target =
-      TargetPlatform.allCases.first(where: { $0.rawValue == self.targetPlatform }) ?? .unknown
+    let target: TargetPlatform
+
+    if self.targetPlatform.contains(TargetPlatform.ios.rawValue) {
+      target =
+        TargetPlatform.ios
+    } else if self.targetPlatform.contains(TargetPlatform.android.rawValue) {
+      target =
+        TargetPlatform.android
+    } else {
+      target =
+        TargetPlatform.unknown
+    }
 
     return Device(
       name: self.name,

@@ -8,14 +8,15 @@
 import Foundation
 
 class Device {
-  let name: String
-  let id: String
-  let isSupported: Bool
-  let targetPlatform: TargetPlatform
-  let emulator: Bool
-  let sdk: String
-  let capabilities: Capabilities
-  let isFavorite: Bool
+  var name: String
+  var id: String
+  var isSupported: Bool
+  var targetPlatform: TargetPlatform
+  var emulator: Bool
+  var emulatorName: String
+  var sdk: String
+  var capabilities: Capabilities
+  var isFavorite: Bool
   var isBooted: Bool
   var process: Process?
   var pipe: Pipe?
@@ -29,6 +30,7 @@ class Device {
     self.isSupported = isSupported
     self.targetPlatform = targetPlatform
     self.emulator = emulator
+    self.emulatorName = ""
     self.sdk = sdk
     self.capabilities = capabilities
     self.isBooted = isBooted
@@ -56,14 +58,22 @@ class Device {
 
   func boot() {
     self.process = Process()
+    self.pipe = Pipe()
+    process?.standardOutput = pipe
     process?.launchPath = "/usr/bin/env"
 
-    process?.arguments = ["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", self.id]
+    if self.targetPlatform == .ios {
+      process?.arguments = ["xcrun", "simctl", "bootstatus", self.id, "-b"]
+    } else if self.targetPlatform == .android {
+      //TODO: - Boot all android devices
+      process?.arguments = [""]
+    }
 
     process?.launch()
-    // process?.waitUntilExit()
-    // process?.terminate()
-    // self.process = nil
+    process?.waitUntilExit()
+    process?.terminate()
+    self.process = nil
+    self.pipe = nil
   }
 
   func toString() -> String {

@@ -27,13 +27,12 @@ class DeviceManager {
     let devicesProcess = Process()
     devicesProcess.launchPath = "/usr/bin/env"
     let pipe = Pipe()
-    // pipe.fileHandleForReading.waitForDataInBackgroundAndNotify()
     devicesProcess.standardOutput = pipe
     devicesProcess.standardError = pipe
     devicesProcess.arguments = ["flutter", "devices", "--machine"]
     devicesProcess.launch()
-    devicesProcess.waitUntilExit()
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    devicesProcess.waitUntilExit()
     pipe.fileHandleForReading.closeFile()
     devicesProcess.terminate()
 
@@ -42,7 +41,42 @@ class DeviceManager {
     }
     .filter { $0.targetPlatform.isMobile }
 
+    devices.forEach { device in
+      device.isBooted = true
+      if device.targetPlatform == TargetPlatform.android {
+        getAndroidEmulatorName(device)
+      }
+    }
+
     return devices
+  }
+
+  private func getAndroidEmulatorName(_ device: Device) {
+    let process = Process()
+    process.launchPath = "/usr/bin/env"
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+
+    guard let grepArguments = device.sdk.components(separatedBy: " ").last?.dropFirst().dropLast()
+    else {
+      return
+    }
+
+    let grepArgumentsString = String(grepArguments)
+
+    process.arguments = ["flutter", "emulators", grepArgumentsString]
+
+    process.launch()
+
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.terminate()
+
+    guard let dataString = String(data: data, encoding: .utf8) else {
+      return
+    }
+
+    device.emulatorName = dataString.components(separatedBy: " ")[0]
   }
 
   private func fetchIOSSimulators() throws -> [Device] {
@@ -111,10 +145,12 @@ class DeviceManager {
       return
     }
 
-    if dataString.contains("Booted") {
+    if dataString.contains("booted") {
+      // print("Device is booted")
       device.isBooted = true
       return
     } else if dataString.contains("shutdown") {
+      // print("Device is shutdown")
       device.isBooted = false
       return
     }
@@ -162,5 +198,26 @@ class DeviceManager {
     )
 
     return self.availableDevices
+  }
+
+  func bootAll(_ devices: [Device]) {
+    for device in devices {
+      print("Booting \(device.name) (\(device.id))")
+      device.boot()
+      checkIsIOSDeviceIsBooted(device)
+      print("Booted:\n\(device.toString())")
+    }
+    let process = Process()
+    process.launchPath = "/usr/bin/env"
+    process.arguments = ["open", "-a", "Simulator"]
+    process.launch()
+    process.waitUntilExit()
+    process.terminate()
+  }
+
+  func stopAll() {
+    for device in self.availableDevices {
+      device.stop()
+    }
   }
 }

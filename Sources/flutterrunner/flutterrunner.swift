@@ -14,15 +14,18 @@ public struct flutterrunner {
     )
     defer {
       print("Exiting..")
+      DeviceManager.shared.stopAll()
     }
     // Control-C handler
     signal(SIGINT) { signal in
       print("Exiting..")
+      DeviceManager.shared.stopAll()
       exit(0)
     }
 
     runNew()
-    // RunLoop.main.run()
+    // DeviceManager.shared.test()
+    RunLoop.main.run()
   }
 
   static func runNew() {
@@ -40,14 +43,15 @@ public struct flutterrunner {
     } else {
       //TODO: - First one is booted and others are not booted
       Util.print("Trying to boot the devices..")
-      devices.forEach { device in
-        print("Booting \(device.name) (\(device.id))")
-        device.boot()
-        DeviceManager.shared.checkIsIOSDeviceIsBooted(device)
-        print("Booted:\n\(device.toString())")
-      }
+      DeviceManager.shared.bootAll(devices)
     }
 
+    //TODO: - Not Working
+    let processes: [Process] = devices.filter { $0.process != nil }.map { $0.process! }
+
+    Util.print("Processes: \(processes.count)")
+
+    launchProcesses(processes)
   }
 
   public static func runsubs() {
@@ -149,6 +153,7 @@ public struct flutterrunner {
       let tmpPipe = Pipe()
       process.standardOutput = tmpPipe
 
+      print("Launching: \(process.arguments![3])")
       process.launch()
 
       process.terminationHandler = { process in
