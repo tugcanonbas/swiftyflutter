@@ -61,13 +61,7 @@ class Device {
     self.pipe = Pipe()
     process?.standardOutput = pipe
     process?.launchPath = "/usr/bin/env"
-
-    if self.targetPlatform == .ios {
-      process?.arguments = ["xcrun", "simctl", "bootstatus", self.id, "-b"]
-    } else if self.targetPlatform == .android {
-      //TODO: - Boot all android devices
-      process?.arguments = [""]
-    }
+    process?.arguments = ["xcrun", "simctl", "bootstatus", self.id, "-b"]
 
     process?.launch()
     process?.waitUntilExit()

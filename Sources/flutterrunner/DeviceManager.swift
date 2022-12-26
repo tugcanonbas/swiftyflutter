@@ -54,6 +54,7 @@ class DeviceManager {
   private func getAndroidEmulatorName(_ device: Device) {
     let process = Process()
     process.launchPath = "/usr/bin/env"
+    process.arguments = ["flutter", "emulators"]
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = pipe
@@ -201,18 +202,86 @@ class DeviceManager {
   }
 
   func bootAll(_ devices: [Device]) {
-    for device in devices {
-      print("Booting \(device.name) (\(device.id))")
-      device.boot()
-      checkIsIOSDeviceIsBooted(device)
-      print("Booted:\n\(device.toString())")
+    // for device in devices {
+    //   print("Booting \(device.name) (\(device.id))")
+    //   device.boot()
+    //   checkIsIOSDeviceIsBooted(device)
+    //   print("Booted:\n\(device.toString())")
+    // }
+    // let process = Process()
+    // process.launchPath = "/usr/bin/env"
+    // process.arguments = ["open", "-a", "Simulator"]
+    // process.launch()
+    // process.waitUntilExit()
+    // process.terminate()
+    bootAndroidEmulators()
+  }
+
+  func bootAndroidEmulators() {
+    let androidProcess = Process()
+    let androidPipe = Pipe()
+    androidProcess.standardOutput = androidPipe
+    androidProcess.launchPath = "/usr/bin/env"
+    // androidProcess.arguments = ["flutter", "emulators", "|", "grep", "• android"]
+    androidProcess.arguments = ["flutter", "emulators"]
+    androidProcess.launch()
+    androidProcess.waitUntilExit()
+    let data = androidPipe.fileHandleForReading.readDataToEndOfFile()
+    androidPipe.fileHandleForReading.closeFile()
+    androidProcess.terminate()
+
+    guard let dataString = String(data: data, encoding: .utf8) else {
+      print("No data found")
+      return
     }
+
+    let lines = dataString.components(separatedBy: "\n")
+    let emulator = lines.filter { $0.contains("• android") }[0].components(separatedBy: " ")[0]
+
+    let emulatorName = String(emulator)
+
     let process = Process()
     process.launchPath = "/usr/bin/env"
-    process.arguments = ["open", "-a", "Simulator"]
+    process.arguments = ["flutter", "emulators", "--launch", emulatorName]
     process.launch()
     process.waitUntilExit()
     process.terminate()
+
+    sleep(3)
+
+    print("Booted \(emulatorName)")
+
+    let components = emulatorName.components(separatedBy: "_")
+    guard let deviceName = components.last else {
+      print("No device name found")
+      return
+    }
+
+    let newName = "API \(deviceName)"
+
+    //TODO: - NOTWORKING
+    //TODO: - Check if device is booted
+    //TODO: - Add device to available devices or update it
+
+    guard let flutterDevices = try? getFlutterDevices() else {
+      print("No flutter devices found")
+      return
+    }
+
+    for device in flutterDevices {
+      if device.sdk.contains(newName) {
+        print("Booted:\n\(device.toString())")
+        device.isBooted = true
+
+        if !self.availableDevices.contains(where: { $0.id == device.id }) {
+          print("Adding \(device.name) (\(device.id)) to available devices")
+          self.availableDevices.append(device)
+        } else {
+          print("Updating \(device.name) (\(device.id)) in available devices")
+          self.availableDevices = self.availableDevices.map { $0.id == device.id ? device : $0 }
+        }
+      }
+    }
   }
 
   func stopAll() {
